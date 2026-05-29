@@ -10,6 +10,8 @@ export interface Product {
   costPrice: number;
   sellingPrice: number;
   stock: number;
+  lastUpdated?: number;
+  deleted?: boolean;
 }
 
 export interface CartItem extends Product {
@@ -18,7 +20,7 @@ export interface CartItem extends Product {
 
 export interface Customer {
   name: string;
-  phone: string;
+  class: string;
 }
 
 export interface Team {
@@ -26,6 +28,8 @@ export interface Team {
   name: string;
   members: string[];
   accessCode: string;
+  lastUpdated?: number;
+  deleted?: boolean;
 }
 
 export type Campus = 'Main Campus' | 'Nsaa Campus' | 'Sabala Campus';
@@ -42,6 +46,8 @@ export interface Sale {
   teamName: string;
   memberName: string;
   campus: Campus;
+  lastUpdated?: number;
+  deleted?: boolean;
 }
 
 export interface ShiftReport {
@@ -64,6 +70,8 @@ export interface Promotion {
   minPurchase?: number; // Minimum subtotal (for percentage/fixed) or minimum quantity (for bogo)
   productId?: string; // Optional: Only applies to this product
   active: boolean;
+  lastUpdated?: number;
+  deleted?: boolean;
 }
 
 export interface LoginLog {
@@ -78,7 +86,7 @@ export interface LoginLog {
 export type View = 'checkout' | 'inventory' | 'analytics' | 'login' | 'admin' | 'sales' | 'promotions';
 export type Role = 'admin' | 'team_member';
 
-export const CATEGORIES = ['Soft Drinks', 'Water', 'Biscuit', 'Candy', 'Bread', 'Meat', 'Other'];
+export const CATEGORIES = ['Soft Drinks', 'Water', 'Biscuit', 'Candy', 'Bread', 'Meat', 'Snacks', 'Stationery', 'Other'];
 export const CAMPUSES: Campus[] = ['Main Campus', 'Nsaa Campus', 'Sabala Campus'];
 
 export const CUSTOMER_TIPS = [

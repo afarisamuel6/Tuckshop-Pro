@@ -4,7 +4,7 @@
  */
 
 import { List, ListItem, ListItemButton, ListItemIcon, ListItemText, Typography, Divider, Box, Button, Stack, Dialog, DialogTitle, DialogContent, DialogActions, Avatar } from '@mui/material';
-import { ShoppingCart, Inventory, BarChart, Logout, Store, AdminPanelSettings, EventAvailable, ReceiptLong, LocalOffer } from '@mui/icons-material';
+import { ShoppingCart, Inventory, BarChart, Logout, Store, AdminPanelSettings, EventAvailable, ReceiptLong, LocalOffer, CloudDone } from '@mui/icons-material';
 import { View, Campus, Role } from '../types';
 import { useState } from 'react';
 import { storageService } from '../services/storage';
@@ -17,11 +17,12 @@ interface SidebarProps {
   memberName: string | null;
   role: Role | null;
   onLogout: () => void;
+  isMobileDrawer?: boolean;
 }
 
 const drawerWidth = 240;
 
-export default function Sidebar({ currentView, onViewChange, teamName, campus, memberName, role, onLogout }: SidebarProps) {
+export default function Sidebar({ currentView, onViewChange, teamName, campus, memberName, role, onLogout, isMobileDrawer }: SidebarProps) {
   const [eodOpen, setEodOpen] = useState(false);
   const [report, setReport] = useState<any>(null);
 
@@ -63,16 +64,16 @@ export default function Sidebar({ currentView, onViewChange, teamName, campus, m
 
   return (
     <Box
-      className="glass-panel"
+      className={isMobileDrawer ? "" : "glass-panel"}
       sx={{
-        width: drawerWidth,
+        width: isMobileDrawer ? '100%' : drawerWidth,
         flexShrink: 0,
         height: '100%',
-        borderRadius: '16px',
+        borderRadius: isMobileDrawer ? 0 : '16px',
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
-        border: '1px solid rgba(255, 255, 255, 0.3)',
+        border: isMobileDrawer ? 'none' : '1px solid rgba(255, 255, 255, 0.3)',
       }}
     >
       <Box sx={{ p: 3, display: 'flex', alignItems: 'center', gap: 1.5 }}>
@@ -117,6 +118,12 @@ export default function Sidebar({ currentView, onViewChange, teamName, campus, m
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
           <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'success.main' }} />
           <Typography variant="caption" color="text.secondary">Shift in progress</Typography>
+        </Stack>
+        <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', mt: 0.5, borderTop: '1px dashed rgba(0,0,0,0.06)', pt: 0.5 }}>
+          <CloudDone sx={{ fontSize: 13, color: 'success.main' }} />
+          <Typography variant="caption" color="success.main" sx={{ fontSize: '0.65rem', fontWeight: 'bold' }}>
+            Multi-Campus Sync Live
+          </Typography>
         </Stack>
       </Box>
 

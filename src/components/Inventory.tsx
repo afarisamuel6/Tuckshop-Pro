@@ -141,34 +141,35 @@ export default function Inventory({
   ];
 
   return (
-    <Box sx={{ height: 'calc(100vh - 100px)', width: '100%', p: 3 }}>
-      <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+    <Box sx={{ height: '100%', width: '100%', p: { xs: 1.5, md: 3 }, display: 'flex', flexDirection: 'column' }}>
+      <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ justifyContent: 'space-between', alignItems: { xs: 'stretch', md: 'center' }, mb: 3 }}>
         <Box>
-          <Typography variant="h4" sx={{ fontWeight: 'bold' }}>Inventory Management</Typography>
+          <Typography variant="h4" sx={{ fontWeight: 'bold', fontSize: { xs: '1.75rem', sm: '2.125rem' } }}>Inventory Management</Typography>
           <Typography variant="body2" color="text.secondary">
             Manage your tuck shop stock levels and prices.
           </Typography>
         </Box>
-        <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ alignItems: 'stretch' }}>
           <TextField
             size="small"
             label="Low Stock Threshold"
             type="number"
             value={lowStockThreshold}
             onChange={(e) => onUpdateThreshold(parseInt(e.target.value) || 0)}
-            sx={{ width: 160 }}
-            InputProps={{
-              inputProps: { min: 0 }
+            sx={{ width: { xs: '100%', sm: 160 } }}
+            slotProps={{
+              htmlInput: { min: 0 }
             }}
           />
-          <Button variant="contained" startIcon={<Add />} onClick={() => handleOpen()}>
+          <Button variant="contained" startIcon={<Add />} onClick={() => handleOpen()} sx={{ py: { xs: 1, sm: 'inherit' } }}>
             Add Product
           </Button>
         </Stack>
       </Stack>
 
       <Box sx={{ 
-        height: '100%', 
+        flexGrow: 1,
+        minHeight: 250,
         width: '100%', 
         borderRadius: 4, 
         overflow: 'hidden', 

@@ -74,14 +74,14 @@ export default function Analytics({ sales }: AnalyticsProps) {
   }, [filteredSales]);
 
   return (
-    <Box sx={{ p: 3, height: 'calc(100vh - 40px)', overflow: 'auto' }}>
-      <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'flex-start', mb: 3 }}>
+    <Box sx={{ p: { xs: 1.5, sm: 2, md: 3 }, height: '100%', overflowY: 'auto' }}>
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ justifyContent: 'space-between', alignItems: { xs: 'stretch', sm: 'flex-start' }, mb: 3 }}>
         <Box>
-          <Typography variant="h4" sx={{ fontWeight: 900 }}>Analytics Dashboard</Typography>
+          <Typography variant="h4" sx={{ fontWeight: 900, fontSize: { xs: '1.75rem', sm: '2.125rem' } }}>Analytics Dashboard</Typography>
           <Typography variant="body2" color="text.secondary">Comprehensive performance tracking across campuses.</Typography>
         </Box>
 
-        <FormControl sx={{ minWidth: 200 }}>
+        <FormControl sx={{ minWidth: 200, width: { xs: '100%', sm: 'auto' } }}>
           <InputLabel id="campus-filter-label"><Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}><FilterList fontSize="small" /><span>Filter by Campus</span></Stack></InputLabel>
           <Select
             labelId="campus-filter-label"

@@ -4,7 +4,8 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Box, CssBaseline, ThemeProvider, createTheme } from '@mui/material';
+import { Box, CssBaseline, ThemeProvider, createTheme, IconButton, Drawer, Chip, Stack, Typography } from '@mui/material';
+import { Menu as MenuIcon } from '@mui/icons-material';
 import { storageService } from './services/storage';
 import { Product, Sale, CartItem, Customer, View, Campus, Role, Promotion } from './types';
 import Sidebar from './components/Sidebar';
@@ -67,6 +68,7 @@ const theme = createTheme({
 
 export default function App() {
   const [view, setView] = useState<View>('login');
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [role, setRole] = useState<Role | null>(null);
   const [teamName, setTeamName] = useState<string | null>(null);
   const [campus, setCampus] = useState<Campus | null>(null);
@@ -94,10 +96,30 @@ export default function App() {
       setView('checkout');
     }
 
-    setProducts(storageService.getProducts());
-    setSales(storageService.getSales());
-    setLowStockThreshold(storageService.getLowStockThreshold());
-    setPromotions(storageService.getPromotions());
+    const refreshLocalState = () => {
+      setProducts(storageService.getProducts());
+      setSales(storageService.getSales());
+      setLowStockThreshold(storageService.getLowStockThreshold());
+      setPromotions(storageService.getPromotions());
+    };
+
+    refreshLocalState();
+
+    // Trigger initial background sync
+    storageService.syncWithServer();
+
+    // Set up periodic sync every 5 seconds to support concurrent multi-device logins across different campuses
+    const interval = setInterval(() => {
+      storageService.syncWithServer();
+    }, 5000);
+
+    // Subscribe to sync changes to update react state in real-time
+    const unsubscribe = storageService.onSync(refreshLocalState);
+
+    return () => {
+      clearInterval(interval);
+      unsubscribe();
+    };
   }, []);
 
   const handleTeamLogin = (team: string, selectedCampus: Campus, member: string) => {
@@ -181,21 +203,112 @@ export default function App() {
       <Box 
         sx={{ 
           display: 'flex', 
+          flexDirection: { xs: 'column', md: 'row' },
           height: '100vh', 
-          p: 2, 
-          gap: 2,
+          p: { xs: 1, sm: 2 }, 
+          gap: { xs: 1, sm: 2 },
           overflow: 'hidden'
         }}
       >
-        <Sidebar 
-          currentView={view} 
-          onViewChange={setView} 
-          teamName={teamName} 
-          campus={campus}
-          memberName={memberName}
-          role={role}
-          onLogout={handleLogout} 
-        />
+        {/* Mobile Top Header */}
+        <Box 
+          sx={{ 
+            display: { xs: 'flex', md: 'none' }, 
+            alignItems: 'center', 
+            justifyContent: 'space-between',
+            px: 2, 
+            py: 1.5, 
+            borderRadius: '12px',
+            bgcolor: 'background.paper',
+            border: '1px solid rgba(0,0,0,0.05)',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.02)',
+            backdropFilter: 'blur(20px)',
+          }}
+        >
+          <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center' }}>
+            <IconButton 
+              color="primary" 
+              onClick={() => setMobileOpen(true)}
+              edge="start"
+              sx={{ bgcolor: 'rgba(25, 118, 210, 0.05)', p: 1 }}
+            >
+              <MenuIcon />
+            </IconButton>
+            <Box>
+              <Typography variant="subtitle1" sx={{ fontWeight: 'black', color: 'primary.main', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                DTI <span style={{ color: '#333' }}>TuckShop</span>
+              </Typography>
+              {teamName && (
+                <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', mt: -0.5 }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 'bold', fontSize: '0.65rem' }}>
+                    {teamName} • {campus}
+                  </Typography>
+                  <span style={{ fontSize: '7px', display: 'inline-flex', alignItems: 'center', background: 'rgba(46, 125, 50, 0.1)', color: '#2e7d32', padding: '1px 4px', borderRadius: '4px', fontWeight: 'bold' }}>
+                    LIVE
+                  </span>
+                </Stack>
+              )}
+            </Box>
+          </Stack>
+          
+          {role && (
+            <Chip
+              label={role === 'admin' ? 'Admin' : memberName || 'Member'}
+              size="small"
+              color={role === 'admin' ? 'primary' : 'success'}
+              variant="filled"
+              sx={{ fontWeight: 'bold' }}
+            />
+          )}
+        </Box>
+
+        {/* Desktop Permanent Sidebar */}
+        <Box sx={{ display: { xs: 'none', md: 'block' }, height: '100%' }}>
+          <Sidebar 
+            currentView={view} 
+            onViewChange={setView} 
+            teamName={teamName} 
+            campus={campus}
+            memberName={memberName}
+            role={role}
+            onLogout={handleLogout} 
+          />
+        </Box>
+
+        {/* Mobile Slide-Out Drawer Sidebar */}
+        <Drawer
+          anchor="left"
+          open={mobileOpen}
+          onClose={() => setMobileOpen(false)}
+          sx={{
+            display: { xs: 'block', md: 'none' },
+            zIndex: 1400,
+            '& .MuiDrawer-paper': {
+              boxSizing: 'border-box',
+              width: 250,
+              bgcolor: 'background.paper',
+              border: 'none',
+              boxShadow: '8px 0 32px rgba(0,0,0,0.1)'
+            },
+          }}
+        >
+          <Sidebar 
+            currentView={view} 
+            onViewChange={(v) => {
+              setView(v);
+              setMobileOpen(false);
+            }} 
+            teamName={teamName} 
+            campus={campus}
+            memberName={memberName}
+            role={role}
+            onLogout={() => {
+              handleLogout();
+              setMobileOpen(false);
+            }}
+            isMobileDrawer={true}
+          />
+        </Drawer>
         
         <Box 
           component="main" 

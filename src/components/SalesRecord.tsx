@@ -11,7 +11,7 @@ import {
   Button, FormControl, InputLabel, Select, MenuItem
 } from '@mui/material';
 import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
-import { Visibility, Person, CalendarToday, LocationOn, FileDownload, Delete } from '@mui/icons-material';
+import { Visibility, Person, CalendarToday, LocationOn, FileDownload, Delete, School } from '@mui/icons-material';
 import { Sale, CAMPUSES, Team, Role } from '../types';
 import { storageService } from '../services/storage';
 
@@ -133,8 +133,8 @@ export default function SalesRecord({ sales, role, onSalesUpdate }: SalesRecordP
     { 
       field: 'customer', 
       headerName: 'Customer', 
-      width: 150,
-      valueGetter: (value: any) => value?.name || 'Walk-in'
+      width: 180,
+      valueGetter: (value: any) => value ? `${value.name} (${value.class || 'N/A'})` : 'Walk-in'
     },
     { 
       field: 'items', 
@@ -173,14 +173,14 @@ export default function SalesRecord({ sales, role, onSalesUpdate }: SalesRecordP
   ];
 
   return (
-    <Box sx={{ height: 'calc(100vh - 40px)', width: '100%', p: 3, display: 'flex', flexDirection: 'column' }}>
-      <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+    <Box sx={{ height: '100%', width: '100%', p: { xs: 1.5, md: 3 }, display: 'flex', flexDirection: 'column' }}>
+      <Stack direction={{ xs: 'column', lg: 'row' }} spacing={2} sx={{ justifyContent: 'space-between', alignItems: { xs: 'stretch', lg: 'center' }, mb: 3 }}>
         <Box>
-          <Typography variant="h4" sx={{ fontWeight: 900 }}>Sales Record</Typography>
+          <Typography variant="h4" sx={{ fontWeight: 900, fontSize: { xs: '1.75rem', sm: '2.125rem' } }}>Sales Record</Typography>
           <Typography variant="body2" color="text.secondary">History of all transactions processed.</Typography>
         </Box>
-        <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
-          <FormControl sx={{ minWidth: 120 }} size="small">
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ alignItems: 'stretch', flexWrap: 'wrap', width: { xs: '100%', lg: 'auto' } }}>
+          <FormControl sx={{ minWidth: 120, flex: { xs: '1 1 100%', sm: '1' } }} size="small">
             <InputLabel>Campus</InputLabel>
             <Select
               value={campusFilter}
@@ -194,7 +194,7 @@ export default function SalesRecord({ sales, role, onSalesUpdate }: SalesRecordP
               ))}
             </Select>
           </FormControl>
-          <FormControl sx={{ minWidth: 120 }} size="small">
+          <FormControl sx={{ minWidth: 120, flex: { xs: '1 1 100%', sm: '1' } }} size="small">
             <InputLabel>Team</InputLabel>
             <Select
               value={teamFilter}
@@ -208,7 +208,7 @@ export default function SalesRecord({ sales, role, onSalesUpdate }: SalesRecordP
               ))}
             </Select>
           </FormControl>
-          <FormControl sx={{ minWidth: 120 }} size="small">
+          <FormControl sx={{ minWidth: 120, flex: { xs: '1 1 100%', sm: '1' } }} size="small">
             <InputLabel>Period</InputLabel>
             <Select
               value={period}
@@ -227,7 +227,7 @@ export default function SalesRecord({ sales, role, onSalesUpdate }: SalesRecordP
             startIcon={<FileDownload />} 
             onClick={handleExportCSV}
             disabled={filteredSales.length === 0}
-            sx={{ fontWeight: 'bold' }}
+            sx={{ fontWeight: 'bold', py: { xs: 1, sm: 'inherit' }, flex: { xs: '1 1 100%', sm: 'none' } }}
           >
             Export CSV
           </Button>
@@ -330,8 +330,11 @@ export default function SalesRecord({ sales, role, onSalesUpdate }: SalesRecordP
                         <Typography variant="caption" sx={{ fontWeight: 'bold' }}>CUSTOMER</Typography>
                       </Stack>
                       <Typography variant="body2">{selectedSale.customer?.name || 'Walk-in'}</Typography>
-                      {selectedSale.customer?.phone && (
-                        <Typography variant="caption" color="text.secondary">{selectedSale.customer.phone}</Typography>
+                      {selectedSale.customer?.class && (
+                        <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', mt: 0.5 }}>
+                          <School sx={{ fontSize: 14, color: 'text.secondary' }} />
+                          <Typography variant="caption" color="text.secondary">Class: {selectedSale.customer.class}</Typography>
+                        </Stack>
                       )}
                     </Box>
                     <Box sx={{ flex: 1 }}>

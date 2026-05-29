@@ -70,15 +70,16 @@ export default function TeamLogin({ onTeamLogin, onAdminLogin }: TeamLoginProps)
         className="glass-panel"
         sx={{ 
           maxWidth: 450, 
-          width: '100%', 
+          width: 'calc(100% - 32px)', 
+          mx: 2,
           borderRadius: 8, 
-          p: 2,
+          p: { xs: 0.5, sm: 1.5, md: 2 },
           background: 'rgba(255, 255, 255, 0.7)',
           backdropFilter: 'blur(20px)',
           border: '1px solid rgba(255, 255, 255, 0.3)',
         }}
       >
-        <CardContent sx={{ p: 4, textAlign: 'center' }}>
+        <CardContent sx={{ p: { xs: 2, sm: 3, md: 4 }, textAlign: 'center' }}>
           <Stack spacing={3} sx={{ alignItems: 'center' }}>
             <Box sx={{ position: 'relative', mb: 1 }}>
               <Avatar 
