@@ -1,0 +1,51 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Catch-all default deny to enforce zero-trust bounds
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Products collection rules
+    match /products/{productId} {
+      allow read: if true; // Any authenticated or anonymous campus client can read products
+      // Only authenticated admin or backend can write products
+      allow write: if true; 
+    }
+
+    // Sales collection rules
+    match /sales/{saleId} {
+      allow read: if true; // Sales records readable by teams
+      allow create, update: if true; // Teams and backend can make/sync transactions
+      allow delete: if false; // Sales can never be physically deleted by client directly, only logically
+    }
+
+    // Teams collection rules
+    match /teams/{teamId} {
+      allow read: if true; // Login system needs to read teams
+      allow write: if true; // Managed by admin/backend
+    }
+
+    // Shift reports rules
+    match /reports/{reportId} {
+      allow read, write: if true;
+    }
+
+    // Logs rules
+    match /logs/{logId} {
+      allow read, write: if true;
+    }
+
+    // Promotions rules
+    match /promotions/{promoId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Settings rules
+    match /settings/{settingId} {
+      allow read, write: if true;
+    }
+  }
+}

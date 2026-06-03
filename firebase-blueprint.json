@@ -1,0 +1,141 @@
+{
+  "entities": {
+    "Product": {
+      "title": "Product",
+      "description": "Products available in the tuckshop",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "costPrice": { "type": "number" },
+        "sellingPrice": { "type": "number" },
+        "stock": { "type": "number" },
+        "deleted": { "type": "boolean" },
+        "lastUpdated": { "type": "number" }
+      },
+      "required": ["id", "name", "category", "costPrice", "sellingPrice", "stock"]
+    },
+    "Sale": {
+      "title": "Sale",
+      "description": "A recorded customer transaction",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "timestamp": { "type": "number" },
+        "items": { "type": "array" },
+        "subtotal": { "type": "number" },
+        "discount": { "type": "number" },
+        "total": { "type": "number" },
+        "campus": { "type": "string" },
+        "teamName": { "type": "string" },
+        "memberName": { "type": "string" },
+        "customer": { "type": "object" },
+        "deleted": { "type": "boolean" },
+        "lastUpdated": { "type": "number" }
+      },
+      "required": ["id", "timestamp", "items", "subtotal", "total", "campus", "teamName", "memberName"]
+    },
+    "Team": {
+      "title": "Team",
+      "description": "Sales teams operating the tuckshop",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "members": { "type": "array" },
+        "accessCode": { "type": "string" },
+        "deleted": { "type": "boolean" },
+        "lastUpdated": { "type": "number" }
+      },
+      "required": ["id", "name", "members", "accessCode"]
+    },
+    "ShiftReport": {
+      "title": "ShiftReport",
+      "description": "Reconciliation reports filed during shift handover/closing",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "timestamp": { "type": "number" },
+        "teamName": { "type": "string" },
+        "memberName": { "type": "string" },
+        "campus": { "type": "string" },
+        "salesCount": { "type": "number" },
+        "totalRevenue": { "type": "number" },
+        "cashCounted": { "type": "number" },
+        "discrepancy": { "type": "number" },
+        "notes": { "type": "string" }
+      },
+      "required": ["id", "timestamp", "teamName", "memberName", "campus", "salesCount", "totalRevenue", "cashCounted", "discrepancy"]
+    },
+    "LoginLog": {
+      "title": "LoginLog",
+      "description": "Audit trails of staff and admin logins",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "timestamp": { "type": "number" },
+        "user": { "type": "string" },
+        "role": { "type": "string" },
+        "teamName": { "type": "string" },
+        "campus": { "type": "string" }
+      },
+      "required": ["id", "timestamp", "user", "role"]
+    },
+    "Promotion": {
+      "title": "Promotion",
+      "description": "Marketing sales promotions and discount rules",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "value": { "type": "number" },
+        "minPurchase": { "type": "number" },
+        "productId": { "type": "string" },
+        "active": { "type": "boolean" },
+        "deleted": { "type": "boolean" },
+        "lastUpdated": { "type": "number" }
+      },
+      "required": ["id", "name", "type", "value", "active"]
+    },
+    "SystemSettings": {
+      "title": "SystemSettings",
+      "description": "Global tuckshop parameters and state configuration",
+      "type": "object",
+      "properties": {
+        "lowStockThreshold": { "type": "number" }
+      }
+    }
+  },
+  "firestore": {
+    "products": {
+      "schema": "Product",
+      "description": "Shared real-time catalog of products"
+    },
+    "sales": {
+      "schema": "Sale",
+      "description": "Exhaustive sales register across all campuses"
+    },
+    "teams": {
+      "schema": "Team",
+      "description": "Authorized staff teams"
+    },
+    "reports": {
+      "schema": "ShiftReport",
+      "description": "Shift handover logs"
+    },
+    "logs": {
+      "schema": "LoginLog",
+      "description": "Security audit trails"
+    },
+    "promotions": {
+      "schema": "Promotion",
+      "description": "Offers and active bundle codes"
+    },
+    "settings": {
+      "schema": "SystemSettings",
+      "description": "Tuckshop global meta settings"
+    }
+  }
+}

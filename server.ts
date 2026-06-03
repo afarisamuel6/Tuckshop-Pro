@@ -7,9 +7,27 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
+import { initializeApp } from 'firebase/app';
+import { getFirestore, doc, getDoc, setDoc } from 'firebase/firestore';
 
 const PORT = 3000;
 const DB_FILE = path.join(process.cwd(), 'db.json');
+const CONFIG_FILE = path.join(process.cwd(), 'firebase-applet-config.json');
+
+// Handle active Firebase connection
+let db: any = null;
+try {
+  if (fs.existsSync(CONFIG_FILE)) {
+    const config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
+    const firebaseApp = initializeApp(config);
+    db = getFirestore(firebaseApp, config.firestoreDatabaseId);
+    console.log('Firebase Firestore initialized successfully with project ID:', config.projectId, 'and database ID:', config.firestoreDatabaseId);
+  } else {
+    console.warn('Firebase config not found at:', CONFIG_FILE);
+  }
+} catch (error) {
+  console.error('Failed to initialize Firebase inside server-side environment:', error);
+}
 
 // Interface for DB schema
 interface Database {
@@ -44,24 +62,64 @@ const defaultDB: Database = {
 };
 
 // Helper to load db
-function loadDB(): Database {
+async function loadDB(): Promise<Database> {
+  // Try retrieving state from Firestore first
+  if (db) {
+    try {
+      const docRef = doc(db, 'settings', 'state');
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        const firestoreData = docSnap.data();
+        if (firestoreData) {
+          return {
+            products: firestoreData.products || [],
+            sales: firestoreData.sales || [],
+            teams: firestoreData.teams || [],
+            reports: firestoreData.reports || [],
+            logs: firestoreData.logs || [],
+            lowStockThreshold: firestoreData.lowStockThreshold !== undefined ? firestoreData.lowStockThreshold : 5,
+            promotions: firestoreData.promotions || []
+          };
+        }
+      }
+    } catch (err) {
+      console.error('Error reading Firestore settings/state doc:', err);
+    }
+  }
+
+  // Fall back to local db.json
   try {
     if (fs.existsSync(DB_FILE)) {
       const data = fs.readFileSync(DB_FILE, 'utf8');
-      return JSON.parse(data);
+      const parsed = JSON.parse(data);
+      // Automatically migrate local db.json to Firestore on first launch if Firestore is ready
+      if (db) {
+        await saveDB(parsed);
+      }
+      return parsed;
     }
   } catch (err) {
-    console.error('Error reading db file:', err);
+    console.error('Error reading local file backup:', err);
   }
   return { ...defaultDB };
 }
 
 // Helper to save db
-function saveDB(data: Database) {
+async function saveDB(data: Database) {
+  if (db) {
+    try {
+      const docRef = doc(db, 'settings', 'state');
+      await setDoc(docRef, data);
+    } catch (err) {
+      console.error('Error saving state to Firestore:', err);
+    }
+  }
+
+  // Preserve local backup for extra resilience/offline development
   try {
     fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf8');
   } catch (err) {
-    console.error('Error writing db file:', err);
+    console.error('Error writing local file backup:', err);
   }
 }
 
@@ -100,32 +158,36 @@ async function startServer() {
   app.use(express.json({ limit: '10mb' }));
 
   // API endpoint for syncing data
-  app.post('/api/sync', (req, res) => {
-    const incoming = req.body;
-    const db = loadDB();
+  app.post('/api/sync', async (req, res) => {
+    try {
+      const incoming = req.body;
+      const currentDb = await loadDB();
 
-    // 1. Merge append-only collections by ID
-    db.sales = mergeAppendOnly(db.sales, incoming.sales);
-    db.reports = mergeAppendOnly(db.reports, incoming.reports);
-    db.logs = mergeAppendOnly(db.logs, incoming.logs);
+      // 1. Merge append-only collections by ID
+      currentDb.sales = mergeAppendOnly(currentDb.sales, incoming.sales);
+      currentDb.reports = mergeAppendOnly(currentDb.reports, incoming.reports);
+      currentDb.logs = mergeAppendOnly(currentDb.logs, incoming.logs);
 
-    // 2. Merge mutable collections by lastUpdated timestamp
-    db.products = mergeUpdated(db.products, incoming.products);
-    db.teams = mergeUpdated(db.teams, incoming.teams);
-    db.promotions = mergeUpdated(db.promotions, incoming.promotions);
+      // 2. Merge mutable collections by lastUpdated timestamp
+      currentDb.products = mergeUpdated(currentDb.products, incoming.products);
+      currentDb.teams = mergeUpdated(currentDb.teams, incoming.teams);
+      currentDb.promotions = mergeUpdated(currentDb.promotions, incoming.promotions);
 
-    // 3. Simple replace/largest values for threshold
-    if (incoming.lowStockThreshold !== undefined && incoming.lowStockThreshold !== db.lowStockThreshold) {
-      // Use client threshold if there is any change
-      db.lowStockThreshold = incoming.lowStockThreshold;
+      // 3. Simple replace/largest values for threshold
+      if (incoming.lowStockThreshold !== undefined && incoming.lowStockThreshold !== currentDb.lowStockThreshold) {
+        currentDb.lowStockThreshold = incoming.lowStockThreshold;
+      }
+
+      await saveDB(currentDb);
+
+      res.json({
+        success: true,
+        data: currentDb
+      });
+    } catch (error) {
+      console.error('Error during live sync processing:', error);
+      res.status(500).json({ success: false, error: 'Internal server error during synchronization' });
     }
-
-    saveDB(db);
-
-    res.json({
-      success: true,
-      data: db
-    });
   });
 
   // API endpoint for health check
