@@ -27,6 +27,9 @@ export default function AdminDashboard() {
     members: '',
     accessCode: ''
   });
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+  const [resetInput, setResetInput] = useState('');
+  const [isResetting, setIsResetting] = useState(false);
 
   useEffect(() => {
     refreshData();
@@ -36,6 +39,25 @@ export default function AdminDashboard() {
     setTeams(storageService.getTeams());
     setSales(storageService.getSales());
     setLogs(storageService.getLogs());
+  };
+
+  const handleSystemReset = async () => {
+    if (resetInput !== 'RESET') return;
+    setIsResetting(true);
+    try {
+      const success = await storageService.resetAllData();
+      if (success) {
+        refreshData();
+        setResetConfirmOpen(false);
+        setResetInput('');
+      } else {
+        alert('Failed to reset system data. Please try again.');
+      }
+    } catch (err) {
+      console.error('System reset failed:', err);
+    } finally {
+      setIsResetting(false);
+    }
   };
 
   const getCampusStats = (campusName: string) => {
@@ -324,6 +346,60 @@ export default function AdminDashboard() {
               </Box>
             </CardContent>
           </Card>
+
+          {/* System Reset & Pilot Prep */}
+          <Card sx={{ gridColumn: { md: 'span 2' }, border: '1px solid rgba(211, 47, 47, 0.2)', bgcolor: 'rgba(211, 47, 47, 0.01)' }}>
+            <CardContent>
+              <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mb: 2 }}>
+                <History sx={{ color: '#d32f2f' }} />
+                <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#d32f2f' }}>System Reset & Pilot Prep</Typography>
+              </Stack>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                Completely wipe all current operational data from the database—including products, sales records, onboarded teams, shift reports, and promotions—to prepare a pristine clean slate for your upcoming pilot. The Administrator account will remain active. **This action is irreversible and affects all campuses immediately.**
+              </Typography>
+              <Button 
+                variant="outlined" 
+                color="error" 
+                startIcon={<Delete />} 
+                onClick={() => setResetConfirmOpen(true)}
+                sx={{ fontWeight: 'bold' }}
+              >
+                Perform System Reset
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* System Reset Confirmation Dialog */}
+          <Dialog open={resetConfirmOpen} onClose={() => { setResetConfirmOpen(false); setResetInput(''); }} maxWidth="xs" fullWidth>
+            <DialogTitle sx={{ fontWeight: 'bold', color: 'error.main' }}>Confirm System Wipe</DialogTitle>
+            <DialogContent>
+              <Typography sx={{ mb: 2 }}>
+                Are you absolutely sure you want to perform a full system reset? This will irreversibly delete all products, sales records, teams, reports, and promotions across all campuses.
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2, fontWeight: 'bold' }}>
+                Please type <span style={{ color: '#d32f2f' }}>RESET</span> to confirm this action:
+              </Typography>
+              <TextField
+                fullWidth
+                size="small"
+                value={resetInput}
+                onChange={(e) => setResetInput(e.target.value)}
+                placeholder="RESET"
+                error={resetInput !== '' && resetInput !== 'RESET'}
+              />
+            </DialogContent>
+            <DialogActions sx={{ p: 3 }}>
+              <Button onClick={() => { setResetConfirmOpen(false); setResetInput(''); }}>Cancel</Button>
+              <Button 
+                variant="contained" 
+                color="error" 
+                disabled={resetInput !== 'RESET' || isResetting}
+                onClick={handleSystemReset}
+              >
+                {isResetting ? 'Wiping Database...' : 'Wipe Database'}
+              </Button>
+            </DialogActions>
+          </Dialog>
         </Box>
       </Stack>
     </Box>

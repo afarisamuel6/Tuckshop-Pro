@@ -38,6 +38,7 @@ interface Database {
   logs: any[];
   lowStockThreshold: number;
   promotions: any[];
+  resetTimestamp?: number;
 }
 
 const defaultDB: Database = {
@@ -58,7 +59,8 @@ const defaultDB: Database = {
   reports: [],
   logs: [],
   lowStockThreshold: 5,
-  promotions: []
+  promotions: [],
+  resetTimestamp: 0
 };
 
 // Helper to load db
@@ -78,7 +80,8 @@ async function loadDB(): Promise<Database> {
             reports: firestoreData.reports || [],
             logs: firestoreData.logs || [],
             lowStockThreshold: firestoreData.lowStockThreshold !== undefined ? firestoreData.lowStockThreshold : 5,
-            promotions: firestoreData.promotions || []
+            promotions: firestoreData.promotions || [],
+            resetTimestamp: Number(firestoreData.resetTimestamp) || 0
           };
         }
       }
@@ -163,6 +166,37 @@ async function startServer() {
       const incoming = req.body;
       const currentDb = await loadDB();
 
+      const serverResetTimestamp = Number(currentDb.resetTimestamp) || 0;
+      const incomingResetTimestamp = Number(incoming.resetTimestamp) || 0;
+
+      if (serverResetTimestamp > incomingResetTimestamp) {
+        console.log(`Server reset (${serverResetTimestamp}) is newer than client sync (${incomingResetTimestamp}). Sending fresh state without merging.`);
+        res.json({
+          success: true,
+          data: currentDb
+        });
+        return;
+      }
+
+      if (incomingResetTimestamp > serverResetTimestamp) {
+        console.log(`Client reset (${incomingResetTimestamp}) is newer than server reset (${serverResetTimestamp}). Overwriting server state.`);
+        currentDb.resetTimestamp = incomingResetTimestamp;
+        currentDb.products = incoming.products || [];
+        currentDb.sales = incoming.sales || [];
+        currentDb.teams = incoming.teams || [];
+        currentDb.reports = incoming.reports || [];
+        currentDb.logs = incoming.logs || [];
+        currentDb.promotions = incoming.promotions || [];
+        currentDb.lowStockThreshold = incoming.lowStockThreshold !== undefined ? incoming.lowStockThreshold : 5;
+
+        await saveDB(currentDb);
+        res.json({
+          success: true,
+          data: currentDb
+        });
+        return;
+      }
+
       // 1. Merge append-only collections by ID
       currentDb.sales = mergeAppendOnly(currentDb.sales, incoming.sales);
       currentDb.reports = mergeAppendOnly(currentDb.reports, incoming.reports);
@@ -187,6 +221,39 @@ async function startServer() {
     } catch (error) {
       console.error('Error during live sync processing:', error);
       res.status(500).json({ success: false, error: 'Internal server error during synchronization' });
+    }
+  });
+
+  // API endpoint for resetting data
+  app.post('/api/reset', async (req, res) => {
+    try {
+      const cleanDb: Database = {
+        products: [],
+        sales: [],
+        teams: [],
+        reports: [],
+        logs: [
+          {
+            id: Math.random().toString(36).substr(2, 9),
+            timestamp: Date.now(),
+            user: 'Administrator',
+            role: 'admin',
+            teamName: 'System Reset',
+            campus: 'Main Campus'
+          }
+        ],
+        lowStockThreshold: 5,
+        promotions: [],
+        resetTimestamp: Date.now()
+      };
+      await saveDB(cleanDb);
+      res.json({
+        success: true,
+        data: cleanDb
+      });
+    } catch (error) {
+      console.error('Error during database reset:', error);
+      res.status(500).json({ success: false, error: 'Internal server error during database reset' });
     }
   });
 

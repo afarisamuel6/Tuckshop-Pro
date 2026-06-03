@@ -89,7 +89,8 @@ export const storageService = {
         reports: JSON.parse(localStorage.getItem(STORAGE_KEYS.REPORTS) || '[]'),
         logs: JSON.parse(localStorage.getItem(STORAGE_KEYS.LOGS) || '[]'),
         lowStockThreshold: storageService.getLowStockThreshold(),
-        promotions: JSON.parse(localStorage.getItem(STORAGE_KEYS.PROMOTIONS) || '[]')
+        promotions: JSON.parse(localStorage.getItem(STORAGE_KEYS.PROMOTIONS) || '[]'),
+        resetTimestamp: Number(localStorage.getItem('tuckshop_reset_timestamp')) || 0
       };
 
       let syncSucceeded = false;
@@ -128,7 +129,8 @@ export const storageService = {
           reports: [],
           logs: [],
           lowStockThreshold: 5,
-          promotions: []
+          promotions: [],
+          resetTimestamp: 0
         };
 
         if (docSnap.exists()) {
@@ -141,30 +143,54 @@ export const storageService = {
               reports: firestoreData.reports || [],
               logs: firestoreData.logs || [],
               lowStockThreshold: firestoreData.lowStockThreshold !== undefined ? firestoreData.lowStockThreshold : 5,
-              promotions: firestoreData.promotions || []
+              promotions: firestoreData.promotions || [],
+              resetTimestamp: Number(firestoreData.resetTimestamp) || 0
             };
           }
         }
 
-        // Merge logic client-side (identical to Express server)
-        currentDb.sales = mergeAppendOnlyClient(currentDb.sales, payload.sales);
-        currentDb.reports = mergeAppendOnlyClient(currentDb.reports, payload.reports);
-        currentDb.logs = mergeAppendOnlyClient(currentDb.logs, payload.logs);
+        const serverResetTimestamp = Number(currentDb.resetTimestamp) || 0;
+        const incomingResetTimestamp = payload.resetTimestamp;
 
-        currentDb.products = mergeUpdatedClient(currentDb.products, payload.products);
-        currentDb.teams = mergeUpdatedClient(currentDb.teams, payload.teams);
-        currentDb.promotions = mergeUpdatedClient(currentDb.promotions, payload.promotions);
-
-        if (payload.lowStockThreshold !== undefined && payload.lowStockThreshold !== currentDb.lowStockThreshold) {
+        if (serverResetTimestamp > incomingResetTimestamp) {
+          // Server reset is newer, discard client's local updates
+          storageService.updateLocalStateWithServerData(currentDb, payload.lowStockThreshold);
+          syncSucceeded = true;
+        } else if (incomingResetTimestamp > serverResetTimestamp) {
+          // Client reset is newer, override firestore
+          currentDb.resetTimestamp = incomingResetTimestamp;
+          currentDb.products = payload.products;
+          currentDb.sales = payload.sales;
+          currentDb.teams = payload.teams;
+          currentDb.reports = payload.reports;
+          currentDb.logs = payload.logs;
+          currentDb.promotions = payload.promotions;
           currentDb.lowStockThreshold = payload.lowStockThreshold;
-        }
 
-        // Save back direct to Firestore
-        await setDoc(docRef, currentDb);
-        
-        // Sync local storage with newly merged state
-        storageService.updateLocalStateWithServerData(currentDb, payload.lowStockThreshold);
-        syncSucceeded = true;
+          await setDoc(docRef, currentDb);
+          storageService.updateLocalStateWithServerData(currentDb, payload.lowStockThreshold);
+          syncSucceeded = true;
+        } else {
+          // Standard merge logic client-side
+          currentDb.sales = mergeAppendOnlyClient(currentDb.sales, payload.sales);
+          currentDb.reports = mergeAppendOnlyClient(currentDb.reports, payload.reports);
+          currentDb.logs = mergeAppendOnlyClient(currentDb.logs, payload.logs);
+
+          currentDb.products = mergeUpdatedClient(currentDb.products, payload.products);
+          currentDb.teams = mergeUpdatedClient(currentDb.teams, payload.teams);
+          currentDb.promotions = mergeUpdatedClient(currentDb.promotions, payload.promotions);
+
+          if (payload.lowStockThreshold !== undefined && payload.lowStockThreshold !== currentDb.lowStockThreshold) {
+            currentDb.lowStockThreshold = payload.lowStockThreshold;
+          }
+
+          // Save back direct to Firestore
+          await setDoc(docRef, currentDb);
+          
+          // Sync local storage with newly merged state
+          storageService.updateLocalStateWithServerData(currentDb, payload.lowStockThreshold);
+          syncSucceeded = true;
+        }
       }
     } catch (err) {
       console.warn('Sync failed completely (offline or firestore permission issue):', err);
@@ -176,26 +202,46 @@ export const storageService = {
   updateLocalStateWithServerData: (serverData: any, localThreshold: number) => {
     let hasChanges = false;
 
-    const updateKey = (key: string, serverVal: any) => {
-      const serverStr = JSON.stringify(serverVal || []);
-      const localStr = localStorage.getItem(key);
-      if (localStr !== serverStr) {
-        localStorage.setItem(key, serverStr);
+    const serverResetTimestamp = Number(serverData.resetTimestamp) || 0;
+    const localResetTimestamp = Number(localStorage.getItem('tuckshop_reset_timestamp')) || 0;
+
+    if (serverResetTimestamp > localResetTimestamp) {
+      console.log('Detected a remote database reset. Clearing local storage data to start fresh...');
+      
+      localStorage.setItem('tuckshop_reset_timestamp', serverResetTimestamp.toString());
+      localStorage.setItem('tuckshop_initialized', 'true');
+      
+      localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(serverData.products || []));
+      localStorage.setItem(STORAGE_KEYS.SALES, JSON.stringify(serverData.sales || []));
+      localStorage.setItem(STORAGE_KEYS.TEAMS_LIST, JSON.stringify(serverData.teams || []));
+      localStorage.setItem(STORAGE_KEYS.REPORTS, JSON.stringify(serverData.reports || []));
+      localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(serverData.logs || []));
+      localStorage.setItem(STORAGE_KEYS.PROMOTIONS, JSON.stringify(serverData.promotions || []));
+      localStorage.setItem(STORAGE_KEYS.THRESHOLD, (serverData.lowStockThreshold || 5).toString());
+      
+      hasChanges = true;
+    } else {
+      const updateKey = (key: string, serverVal: any) => {
+        const serverStr = JSON.stringify(serverVal || []);
+        const localStr = localStorage.getItem(key);
+        if (localStr !== serverStr) {
+          localStorage.setItem(key, serverStr);
+          hasChanges = true;
+        }
+      };
+
+      updateKey(STORAGE_KEYS.PRODUCTS, serverData.products);
+      updateKey(STORAGE_KEYS.SALES, serverData.sales);
+      updateKey(STORAGE_KEYS.TEAMS_LIST, serverData.teams);
+      updateKey(STORAGE_KEYS.REPORTS, serverData.reports);
+      updateKey(STORAGE_KEYS.LOGS, serverData.logs);
+      updateKey(STORAGE_KEYS.PROMOTIONS, serverData.promotions);
+
+      const serverThreshold = Number(serverData.lowStockThreshold) || 5;
+      if (localThreshold !== serverThreshold) {
+        localStorage.setItem(STORAGE_KEYS.THRESHOLD, serverThreshold.toString());
         hasChanges = true;
       }
-    };
-
-    updateKey(STORAGE_KEYS.PRODUCTS, serverData.products);
-    updateKey(STORAGE_KEYS.SALES, serverData.sales);
-    updateKey(STORAGE_KEYS.TEAMS_LIST, serverData.teams);
-    updateKey(STORAGE_KEYS.REPORTS, serverData.reports);
-    updateKey(STORAGE_KEYS.LOGS, serverData.logs);
-    updateKey(STORAGE_KEYS.PROMOTIONS, serverData.promotions);
-
-    const serverThreshold = Number(serverData.lowStockThreshold) || 5;
-    if (localThreshold !== serverThreshold) {
-      localStorage.setItem(STORAGE_KEYS.THRESHOLD, serverThreshold.toString());
-      hasChanges = true;
     }
 
     if (hasChanges) {
@@ -465,8 +511,76 @@ export const storageService = {
     else localStorage.removeItem(STORAGE_KEYS.ROLE);
   },
 
+  resetAllData: async () => {
+    const timestamp = Date.now();
+    const cleanDb = {
+      products: [],
+      sales: [],
+      teams: [],
+      reports: [],
+      logs: [
+        {
+          id: Math.random().toString(36).substr(2, 9),
+          timestamp: Date.now(),
+          user: 'Administrator',
+          role: 'admin' as const,
+          teamName: 'System Reset',
+          campus: 'Main Campus' as const
+        }
+      ],
+      lowStockThreshold: 5,
+      promotions: [],
+      resetTimestamp: timestamp
+    };
+
+    // 1. Try backend reset route
+    try {
+      const res = await fetch('/api/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success) {
+          localStorage.setItem('tuckshop_reset_timestamp', timestamp.toString());
+          localStorage.setItem('tuckshop_initialized', 'true');
+          storageService.updateLocalStateWithServerData(cleanDb, 5);
+          return true;
+        }
+      }
+    } catch (err) {
+      console.warn('Backend reset API failed, attempting client-side direct override...', err);
+    }
+
+    // 2. Client-side Firestore direct override fallback
+    if (clientDb) {
+      try {
+        const docRef = doc(clientDb, 'settings', 'state');
+        await setDoc(docRef, cleanDb);
+        localStorage.setItem('tuckshop_reset_timestamp', timestamp.toString());
+        localStorage.setItem('tuckshop_initialized', 'true');
+        storageService.updateLocalStateWithServerData(cleanDb, 5);
+        return true;
+      } catch (err) {
+        console.error('Failed direct client-side reset:', err);
+      }
+    }
+
+    // 3. Fallback to offline local storage-only reset
+    localStorage.setItem('tuckshop_reset_timestamp', timestamp.toString());
+    localStorage.setItem('tuckshop_initialized', 'true');
+    storageService.updateLocalStateWithServerData(cleanDb, 5);
+    return true;
+  },
+
   // Initialize with dummy data if empty
   init: () => {
+    if (localStorage.getItem('tuckshop_initialized') === 'true') {
+      // Already initialized or has been explicitly reset to start fresh
+      storageService.syncWithServer();
+      return;
+    }
+
     if (!localStorage.getItem(STORAGE_KEYS.PRODUCTS)) {
       const initialProducts: Product[] = [
         { id: '1', name: 'Coca Cola', category: 'Soft Drinks', costPrice: 0.8, sellingPrice: 1.5, stock: 20, lastUpdated: Date.now() },
@@ -490,6 +604,8 @@ export const storageService = {
       ];
       localStorage.setItem(STORAGE_KEYS.TEAMS_LIST, JSON.stringify(initialTeams));
     }
+
+    localStorage.setItem('tuckshop_initialized', 'true');
 
     // Run initial background sync
     storageService.syncWithServer();
