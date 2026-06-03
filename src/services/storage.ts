@@ -4,6 +4,48 @@
  */
 
 import { Product, Sale, Team, ShiftReport, Campus, LoginLog, Role, Promotion } from '../types';
+import { initializeApp } from 'firebase/app';
+import { getFirestore, doc, getDoc, setDoc } from 'firebase/firestore';
+import firebaseConfig from '../../firebase-applet-config.json';
+
+// Initialize client-side Firebase for fallback when running serverless (e.g. on Vercel)
+let clientDb: any = null;
+try {
+  const app = initializeApp(firebaseConfig);
+  clientDb = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+  console.log('Firebase Firestore initialized successfully on client side with database ID:', firebaseConfig.firestoreDatabaseId);
+} catch (error) {
+  console.warn('Failed to initialize Firebase client-side SDK:', error);
+}
+
+// Helper to merge append-only lists by ID
+function mergeAppendOnlyClient<T extends { id: string }>(serverList: T[], incomingList: T[]): T[] {
+  const mergedMap = new Map<string, T>();
+  for (const item of serverList || []) {
+    if (item && item.id) mergedMap.set(item.id, item);
+  }
+  for (const item of incomingList || []) {
+    if (item && item.id) mergedMap.set(item.id, item);
+  }
+  return Array.from(mergedMap.values());
+}
+
+// Helper to merge updated items by timestamp or lastUpdated
+function mergeUpdatedClient<T extends { id: string, lastUpdated?: number }>(serverList: T[], incomingList: T[]): T[] {
+  const mergedMap = new Map<string, T>();
+  for (const item of serverList || []) {
+    if (item && item.id) mergedMap.set(item.id, item);
+  }
+  for (const item of incomingList || []) {
+    if (item && item.id) {
+      const existing = mergedMap.get(item.id);
+      if (!existing || (item.lastUpdated || 0) > (existing.lastUpdated || 0)) {
+        mergedMap.set(item.id, item);
+      }
+    }
+  }
+  return Array.from(mergedMap.values());
+}
 
 const STORAGE_KEYS = {
   PRODUCTS: 'tuckshop_products',
@@ -50,51 +92,116 @@ export const storageService = {
         promotions: JSON.parse(localStorage.getItem(STORAGE_KEYS.PROMOTIONS) || '[]')
       };
 
-      const res = await fetch('/api/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+      let syncSucceeded = false;
 
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success && json.data) {
-          const serverData = json.data;
-          let hasChanges = false;
+      // 1. First attempt through full-stack Express API
+      try {
+        const res = await fetch('/api/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
 
-          const updateKey = (key: string, serverVal: any) => {
-            const serverStr = JSON.stringify(serverVal);
-            const localStr = localStorage.getItem(key);
-            if (localStr !== serverStr) {
-              localStorage.setItem(key, serverStr);
-              hasChanges = true;
+        if (res.ok) {
+          const contentType = res.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            const json = await res.json();
+            if (json.success && json.data) {
+              storageService.updateLocalStateWithServerData(json.data, payload.lowStockThreshold);
+              syncSucceeded = true;
             }
-          };
-
-          updateKey(STORAGE_KEYS.PRODUCTS, serverData.products);
-          updateKey(STORAGE_KEYS.SALES, serverData.sales);
-          updateKey(STORAGE_KEYS.TEAMS_LIST, serverData.teams);
-          updateKey(STORAGE_KEYS.REPORTS, serverData.reports);
-          updateKey(STORAGE_KEYS.LOGS, serverData.logs);
-          updateKey(STORAGE_KEYS.PROMOTIONS, serverData.promotions);
-
-          const serverThreshold = Number(serverData.lowStockThreshold) || 5;
-          if (payload.lowStockThreshold !== serverThreshold) {
-            localStorage.setItem(STORAGE_KEYS.THRESHOLD, serverThreshold.toString());
-            hasChanges = true;
-          }
-
-          if (hasChanges) {
-            syncCallbacks.forEach(cb => {
-              try { cb(); } catch (e) { console.error(e); }
-            });
           }
         }
+      } catch (apiErr) {
+        console.warn('Backend Express sync failed / not running. Falling back to direct client-side Firebase sync...', apiErr);
+      }
+
+      // 2. Direct client-side Firestore fallback (e.g., when hosted on Vercel)
+      if (!syncSucceeded && clientDb) {
+        const docRef = doc(clientDb, 'settings', 'state');
+        const docSnap = await getDoc(docRef);
+        
+        let currentDb: any = {
+          products: [],
+          sales: [],
+          teams: [],
+          reports: [],
+          logs: [],
+          lowStockThreshold: 5,
+          promotions: []
+        };
+
+        if (docSnap.exists()) {
+          const firestoreData = docSnap.data();
+          if (firestoreData) {
+            currentDb = {
+              products: firestoreData.products || [],
+              sales: firestoreData.sales || [],
+              teams: firestoreData.teams || [],
+              reports: firestoreData.reports || [],
+              logs: firestoreData.logs || [],
+              lowStockThreshold: firestoreData.lowStockThreshold !== undefined ? firestoreData.lowStockThreshold : 5,
+              promotions: firestoreData.promotions || []
+            };
+          }
+        }
+
+        // Merge logic client-side (identical to Express server)
+        currentDb.sales = mergeAppendOnlyClient(currentDb.sales, payload.sales);
+        currentDb.reports = mergeAppendOnlyClient(currentDb.reports, payload.reports);
+        currentDb.logs = mergeAppendOnlyClient(currentDb.logs, payload.logs);
+
+        currentDb.products = mergeUpdatedClient(currentDb.products, payload.products);
+        currentDb.teams = mergeUpdatedClient(currentDb.teams, payload.teams);
+        currentDb.promotions = mergeUpdatedClient(currentDb.promotions, payload.promotions);
+
+        if (payload.lowStockThreshold !== undefined && payload.lowStockThreshold !== currentDb.lowStockThreshold) {
+          currentDb.lowStockThreshold = payload.lowStockThreshold;
+        }
+
+        // Save back direct to Firestore
+        await setDoc(docRef, currentDb);
+        
+        // Sync local storage with newly merged state
+        storageService.updateLocalStateWithServerData(currentDb, payload.lowStockThreshold);
+        syncSucceeded = true;
       }
     } catch (err) {
-      console.warn('Sync failed (offline or server issues):', err);
+      console.warn('Sync failed completely (offline or firestore permission issue):', err);
     } finally {
       isSyncing = false;
+    }
+  },
+
+  updateLocalStateWithServerData: (serverData: any, localThreshold: number) => {
+    let hasChanges = false;
+
+    const updateKey = (key: string, serverVal: any) => {
+      const serverStr = JSON.stringify(serverVal || []);
+      const localStr = localStorage.getItem(key);
+      if (localStr !== serverStr) {
+        localStorage.setItem(key, serverStr);
+        hasChanges = true;
+      }
+    };
+
+    updateKey(STORAGE_KEYS.PRODUCTS, serverData.products);
+    updateKey(STORAGE_KEYS.SALES, serverData.sales);
+    updateKey(STORAGE_KEYS.TEAMS_LIST, serverData.teams);
+    updateKey(STORAGE_KEYS.REPORTS, serverData.reports);
+    updateKey(STORAGE_KEYS.LOGS, serverData.logs);
+    updateKey(STORAGE_KEYS.PROMOTIONS, serverData.promotions);
+
+    const serverThreshold = Number(serverData.lowStockThreshold) || 5;
+    if (localThreshold !== serverThreshold) {
+      localStorage.setItem(STORAGE_KEYS.THRESHOLD, serverThreshold.toString());
+      hasChanges = true;
+    }
+
+    if (hasChanges) {
+      syncCallbacks.forEach(cb => {
+        try { cb(); } catch (e) { console.error(e); }
+      });
     }
   },
 
